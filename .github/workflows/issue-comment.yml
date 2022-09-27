@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Comment on Issue
-        uses: actions/github-script@v4
+        uses: actions/github-script@v6
         with:
           script: |
-            github.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: ':wave: Thank you for opening this issue! We'll...',
-            });          
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: ':wave: Hi! Thank you for opening this issue! We'll...'
+            })   
