@@ -2,9 +2,8 @@
 name: Comment on Issue
 
 on:
-  issue_comment:
-    types:
-      - created
+  issues:
+    types: [opened]
 
 jobs:
   hello:
