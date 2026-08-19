@@ -1,0 +1,65 @@
+---
+name: Update Issue Comment
+
+# Recursion safety:
+# 1. The comment is written with the default GITHUB_TOKEN. Events produced by
+#    that token never start new workflow runs, so listeners of issue_comment
+#    (for example .github/workflows/giphy-generator.yml) are not re-triggered.
+# 2. This workflow never listens to issue_comment itself, so it cannot re-enter
+#    through its own output.
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number to update
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: update-issue-comment-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  upsert-comment:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update sticky comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- sticky-status-comment -->';
+            const issue_number = Number(context.payload.issue?.number ?? context.payload.inputs.issue_number);
+            const { owner, repo } = context.repo;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            const revision = existing
+              ? Number(existing.body.match(/Revision: (\d+)/)?.[1] ?? 0) + 1
+              : 1;
+
+            const body = [
+              marker,
+              '### 📌 Status',
+              '',
+              `- Revision: ${revision}`,
+              `- Last updated: ${new Date().toISOString()}`,
+              `- Triggered by: \`${context.eventName}\` (${context.payload.action ?? 'manual'})`,
+              `- Run: [#${context.runNumber}](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId})`,
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              core.notice(`Updated comment ${existing.id} to revision ${revision}`);
+            } else {
+              const { data } = await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              core.notice(`Created comment ${data.id}`);
+            }
